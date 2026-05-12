@@ -7,6 +7,28 @@ summarize content, generate quizzes, explain topics, create
 flashcards, and translate materials from uploaded PDF documents.
 """
 
+import httpx
+
+# ── GLOBAL DEPENDENCY FIX ─────────────────────────────────────
+# Monkey-patch httpx.Client and httpx.AsyncClient to gracefully ignore 
+# the deprecated 'proxies' argument if passed by legacy versions of the openai SDK.
+_original_httpx_init = httpx.Client.__init__
+_original_async_httpx_init = httpx.AsyncClient.__init__
+
+def _patched_httpx_init(self, *args, **kwargs):
+    if 'proxies' in kwargs:
+        kwargs.pop('proxies')
+    _original_httpx_init(self, *args, **kwargs)
+
+def _patched_async_httpx_init(self, *args, **kwargs):
+    if 'proxies' in kwargs:
+        kwargs.pop('proxies')
+    _original_async_httpx_init(self, *args, **kwargs)
+
+httpx.Client.__init__ = _patched_httpx_init
+httpx.AsyncClient.__init__ = _patched_async_httpx_init
+# ──────────────────────────────────────────────────────────────
+
 from contextlib import asynccontextmanager
 from pathlib import Path
 
