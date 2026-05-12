@@ -12,6 +12,7 @@ pdfplumber==0.11.4
 
 # AI & Embeddings
 openai==1.51.0
+httpx==0.27.2
 
 # Vector Store
 faiss-cpu==1.8.0.post1
