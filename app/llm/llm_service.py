@@ -31,11 +31,20 @@ def _get_client() -> OpenAI:
     return _client
 
 
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(min=1, max=10),
-    reraise=True,
-)
+def _make_retry_decorator():
+    """Create a retry decorator using current settings."""
+    return retry(
+        stop=stop_after_attempt(settings.MAX_RETRIES),
+        wait=wait_exponential(
+            min=settings.RETRY_MIN_WAIT,
+            max=settings.RETRY_MAX_WAIT,
+        ),
+        before_sleep=before_sleep_log(logger, "WARNING"),
+        reraise=True,
+    )
+
+
+@_make_retry_decorator()
 def _call_openai(client: OpenAI, messages: list[dict], temperature: float, max_tokens: int):
     """Make an OpenAI chat completion call with retry logic."""
     return client.chat.completions.create(

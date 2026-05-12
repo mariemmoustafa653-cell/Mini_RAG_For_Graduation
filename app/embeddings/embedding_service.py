@@ -84,6 +84,7 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(min=1, max=10),
+    before_sleep=before_sleep_log(logger, "WARNING"),
     reraise=True,
 )
 def _embed_batch(client: OpenAI, batch: list[str]) -> list[list[float]]:
@@ -122,6 +123,7 @@ def get_query_embedding(query: str) -> list[float]:
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(min=1, max=10),
+    before_sleep=before_sleep_log(logger, "WARNING"),
     reraise=True,
 )
 def _embed_single(client: OpenAI, query: str) -> list[float]:
