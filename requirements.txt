@@ -1,0 +1,31 @@
+# ============================================
+# Mini RAG E-Learning Platform Dependencies
+# ============================================
+
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+
+# PDF Processing
+pdfplumber==0.11.4
+
+# AI & Embeddings
+openai==1.51.0
+
+# Vector Store
+faiss-cpu==1.8.0.post1
+numpy==1.26.4
+
+# Configuration
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+
+# Logging
+loguru==0.7.2
+
+# Resilience & Retry
+tenacity==9.0.0
+
+# Utilities
+aiofiles==24.1.0

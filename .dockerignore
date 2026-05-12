@@ -1,0 +1,42 @@
+# ══════════════════════════════════════════════════════════
+# Mini RAG E-Learning Platform — Docker Ignore
+# ══════════════════════════════════════════════════════════
+
+# Virtual environment
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files
+.env
+
+# Logs (generated at runtime)
+logs/
+
+# Data (mounted as volumes)
+uploads/
+vector_data/
+*.db
+
+# Documentation
+README.md
+tree.txt
+*.md
+
+# Docker
+Dockerfile
+docker-compose*.yml
+nginx.conf
+.dockerignore

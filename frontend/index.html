@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini RAG — AI Learning Assistant</title>
+    <meta name="description" content="AI-powered educational assistant. Upload course PDFs and interact with an intelligent tutor for Q&A, summaries, quizzes, explanations, flashcards, and translations.">
+    <meta name="theme-color" content="#0f0e17">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Kufi+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- HEADER                                              -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <header class="header" id="header">
+        <div class="header__inner">
+            <div class="header__brand">
+                <div class="header__logo">
+                    <span class="header__logo-icon">🧠</span>
+                    <h1 class="header__title">Mini<span class="header__title-accent">RAG</span></h1>
+                </div>
+                <p class="header__subtitle">AI Learning Assistant</p>
+            </div>
+            <div class="header__controls">
+                <div class="teacher-selector" id="teacherSelector">
+                    <label class="teacher-selector__label" for="teacherId">Teacher ID</label>
+                    <input
+                        type="text"
+                        id="teacherId"
+                        class="teacher-selector__input"
+                        placeholder="e.g. teacher_1"
+                        value="teacher_1"
+                    >
+                    <div class="teacher-selector__status" id="teacherStatus">
+                        <span class="status-dot status-dot--active"></span>
+                        <span id="teacherStatusText">Ready</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- MAIN LAYOUT                                         -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <main class="main" id="main">
+        <!-- ─── LEFT PANEL: Upload & Documents ────────── -->
+        <aside class="panel panel--left" id="leftPanel">
+            <!-- Upload Section -->
+            <section class="card card--upload" id="uploadSection">
+                <div class="card__header">
+                    <h2 class="card__title">
+                        <span class="card__icon">📄</span>
+                        Upload Materials
+                    </h2>
+                </div>
+                <div class="card__body">
+                    <div class="upload-zone" id="uploadZone">
+                        <div class="upload-zone__content">
+                            <div class="upload-zone__icon">
+                                <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                                    <path d="M24 32V16M24 16L18 22M24 16L30 22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                    <path d="M8 32L8 36C8 38.2091 9.79086 40 12 40L36 40C38.2091 40 40 38.2091 40 36V32" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            </div>
+                            <p class="upload-zone__text">Drag & drop your PDF here</p>
+                            <p class="upload-zone__subtext">or click to browse</p>
+                            <span class="upload-zone__hint">PDF only • Max size 20MB</span>
+                        </div>
+                        <input type="file" id="fileInput" accept=".pdf" hidden>
+                    </div>
+
+                    <!-- Upload Progress -->
+                    <div class="upload-progress" id="uploadProgress" hidden>
+                        <div class="upload-progress__info">
+                            <span class="upload-progress__filename" id="uploadFilename"></span>
+                            <span class="upload-progress__percent" id="uploadPercent">0%</span>
+                        </div>
+                        <div class="upload-progress__bar">
+                            <div class="upload-progress__fill" id="uploadFill"></div>
+                        </div>
+                        <p class="upload-progress__status" id="uploadStatus">Uploading...</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Documents List -->
+            <section class="card card--documents" id="documentsSection">
+                <div class="card__header">
+                    <h2 class="card__title">
+                        <span class="card__icon">📚</span>
+                        My Documents
+                    </h2>
+                    <button class="btn btn--icon" id="refreshDocs" title="Refresh documents">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M1 4v6h6M23 20v-6h-6"/>
+                            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="card__body">
+                    <div class="documents-list" id="documentsList">
+                        <div class="documents-empty" id="documentsEmpty">
+                            <span class="documents-empty__icon">📁</span>
+                            <p>No documents uploaded yet</p>
+                            <p class="documents-empty__hint">Upload a PDF to get started</p>
+                        </div>
+                    </div>
+                    <!-- Index Stats -->
+                    <div class="index-stats" id="indexStats" hidden>
+                        <div class="index-stats__item">
+                            <span class="index-stats__value" id="statVectors">0</span>
+                            <span class="index-stats__label">Vectors</span>
+                        </div>
+                        <div class="index-stats__item">
+                            <span class="index-stats__value" id="statDocs">0</span>
+                            <span class="index-stats__label">Documents</span>
+                        </div>
+                        <div class="index-stats__item">
+                            <span class="index-stats__value" id="statPages">0</span>
+                            <span class="index-stats__label">Pages</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </aside>
+
+        <!-- ─── CENTER: Chat Interface ────────────────── -->
+        <section class="panel panel--center" id="centerPanel">
+            <div class="chat" id="chatContainer">
+                <!-- Chat Header -->
+                <div class="chat__header">
+                    <h2 class="chat__title">
+                        <span class="chat__icon">💬</span>
+                        AI Assistant
+                    </h2>
+                    <div class="page-filter" id="pageFilter">
+                        <label class="page-filter__label">Page Range:</label>
+                        <input type="number" id="fromPage" class="page-filter__input" placeholder="From" min="1">
+                        <span class="page-filter__sep">—</span>
+                        <input type="number" id="toPage" class="page-filter__input" placeholder="To" min="1">
+                        <button class="btn btn--small btn--ghost" id="clearPageFilter" title="Clear filter">✕</button>
+                    </div>
+                </div>
+
+                <!-- Chat Messages -->
+                <div class="chat__messages" id="chatMessages">
+                    <!-- Welcome Message -->
+                    <div class="message message--ai message--welcome">
+                        <div class="message__avatar">🧠</div>
+                        <div class="message__content">
+                            <div class="message__bubble">
+                                <h3>Welcome to Mini RAG! 👋</h3>
+                                <p>I'm your AI learning assistant. Upload a course PDF and I can help you:</p>
+                                <ul>
+                                    <li>💬 <strong>Answer questions</strong> about your materials</li>
+                                    <li>📝 <strong>Summarize</strong> content from specific pages</li>
+                                    <li>❓ <strong>Generate quizzes</strong> for self-assessment</li>
+                                    <li>💡 <strong>Explain</strong> complex topics simply</li>
+                                    <li>📇 <strong>Create flashcards</strong> for studying</li>
+                                    <li>🌍 <strong>Translate</strong> between Arabic & English</li>
+                                </ul>
+                                <p>Start by uploading a PDF on the left panel! 📄</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="chat__input-area">
+                    <div class="chat__input-wrapper">
+                        <textarea
+                            id="chatInput"
+                            class="chat__input"
+                            placeholder="Ask a question about your course materials..."
+                            rows="1"
+                        ></textarea>
+                        <button class="btn btn--send" id="sendBtn" title="Send message">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                                <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ─── RIGHT PANEL: AI Tools ─────────────────── -->
+        <aside class="panel panel--right" id="rightPanel">
+            <section class="card card--tools">
+                <div class="card__header">
+                    <h2 class="card__title">
+                        <span class="card__icon">🛠️</span>
+                        AI Tools
+                    </h2>
+                </div>
+                <div class="card__body">
+                    <div class="tools-grid" id="toolsGrid">
+                        <button class="tool-btn" data-action="chat" id="toolChat">
+                            <span class="tool-btn__icon">💬</span>
+                            <span class="tool-btn__label">Ask Question</span>
+                            <span class="tool-btn__desc">Q&A from course</span>
+                        </button>
+                        <button class="tool-btn" data-action="summarize" id="toolSummarize">
+                            <span class="tool-btn__icon">📝</span>
+                            <span class="tool-btn__label">Summarize</span>
+                            <span class="tool-btn__desc">Condense content</span>
+                        </button>
+                        <button class="tool-btn" data-action="quiz" id="toolQuiz">
+                            <span class="tool-btn__icon">❓</span>
+                            <span class="tool-btn__label">Generate Quiz</span>
+                            <span class="tool-btn__desc">MCQ assessment</span>
+                        </button>
+                        <button class="tool-btn" data-action="explain" id="toolExplain">
+                            <span class="tool-btn__icon">💡</span>
+                            <span class="tool-btn__label">Explain Simply</span>
+                            <span class="tool-btn__desc">Easy explanation</span>
+                        </button>
+                        <button class="tool-btn" data-action="flashcards" id="toolFlashcards">
+                            <span class="tool-btn__icon">📇</span>
+                            <span class="tool-btn__label">Flashcards</span>
+                            <span class="tool-btn__desc">Study cards</span>
+                        </button>
+                        <button class="tool-btn" data-action="translate" id="toolTranslate">
+                            <span class="tool-btn__icon">🌍</span>
+                            <span class="tool-btn__label">Translate</span>
+                            <span class="tool-btn__desc">AR ↔ EN</span>
+                        </button>
+                    </div>
+
+                    <!-- Active Tool Indicator -->
+                    <div class="active-tool" id="activeTool">
+                        <span class="active-tool__label">Active Mode:</span>
+                        <span class="active-tool__name" id="activeToolName">💬 Ask Question</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Quick Tips -->
+            <section class="card card--tips">
+                <div class="card__header">
+                    <h2 class="card__title">
+                        <span class="card__icon">💡</span>
+                        Quick Tips
+                    </h2>
+                </div>
+                <div class="card__body">
+                    <div class="tips-list">
+                        <div class="tip">
+                            <span class="tip__icon">🎯</span>
+                            <p>Use <strong>Page Range</strong> to focus AI on specific pages</p>
+                        </div>
+                        <div class="tip">
+                            <span class="tip__icon">🌐</span>
+                            <p>Ask in <strong>Arabic or English</strong> — AI responds in the same language</p>
+                        </div>
+                        <div class="tip">
+                            <span class="tip__icon">📊</span>
+                            <p>Try <strong>Quiz mode</strong> before exams for self-assessment</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </aside>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- TOAST NOTIFICATIONS                                 -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Scripts -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
