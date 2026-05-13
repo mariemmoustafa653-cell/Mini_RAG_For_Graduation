@@ -192,11 +192,16 @@ async def _handle_ai_action(action: str, request: AIRequest) -> AIResponse:
         # Step 3: Build context
         context = build_context(chunks)
 
-        # Step 4: Route to prompt
-        system_prompt, user_prompt = route(action, context, request.message)
+        # Optimization: If context is empty or confidence is very low, avoid LLM call
+        if (not context.strip() or confidence.get("mean_score", 0) < 0.1) and action in ["chat", "summarize", "explain"]:
+            logger.info(f"Low confidence ({confidence.get('mean_score')}) or empty context for action '{action}', skipping LLM call.")
+            ai_response = "I couldn't find any highly relevant information in the uploaded materials to answer your request with confidence."
+        else:
+            # Step 4: Route to prompt
+            system_prompt, user_prompt = route(action, context, request.message)
 
-        # Step 5: Generate response
-        ai_response = generate(system_prompt, user_prompt)
+            # Step 5: Generate response
+            ai_response = generate(system_prompt, user_prompt)
 
         # Build source references
         sources = [

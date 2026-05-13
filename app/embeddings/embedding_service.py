@@ -4,6 +4,7 @@ Generates vector representations for document chunks and user queries.
 Includes retry logic for API resilience.
 """
 
+from functools import lru_cache
 from google import genai
 from google.genai import types
 from loguru import logger
@@ -22,18 +23,31 @@ client = None
 
 
 def _get_client():
-    """Get or initialize the Gemini API client."""
+    """Get or initialize the Gemini API client with model validation."""
     global client
     if client is None:
         if not settings.GEMINI_API_KEY:
             logger.error("GEMINI_API_KEY is not set in environment!")
         
-        # Explicitly use v1 to avoid legacy v1beta issues
+        # Use v1beta for embeddings as some models are only supported there
         client = genai.Client(
             api_key=settings.GEMINI_API_KEY,
-            http_options={"api_version": "v1"}
+            http_options={"api_version": "v1beta"}
         )
-        logger.info(f"Gemini API configured (embedding model: {settings.EMBEDDING_MODEL})")
+        
+        # Validate primary model availability
+        try:
+            available_models = [m.name for m in client.models.list()]
+            if settings.EMBEDDING_MODEL not in available_models:
+                logger.warning(f"Configured embedding model {settings.EMBEDDING_MODEL} not found in available models.")
+                if settings.FALLBACK_EMBEDDING_MODEL in available_models:
+                    logger.info(f"Using fallback embedding model: {settings.FALLBACK_EMBEDDING_MODEL}")
+                else:
+                    logger.error("Neither primary nor fallback embedding models found!")
+        except Exception as e:
+            logger.warning(f"Could not validate model availability: {e}")
+
+        logger.info(f"Gemini API configured (primary embedding model: {settings.EMBEDDING_MODEL})")
     return client
 
 
@@ -97,11 +111,9 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
     reraise=True,
 )
 def _embed_batch(batch: list[str]) -> list[list[float]]:
-    """Embed a single batch using Gemini API."""
+    """Embed a single batch using Gemini API with fallback."""
     c = _get_client()
     try:
-        # In the new google-genai SDK, passing a list to contents should work
-        # but we must be careful with how the response is parsed.
         result = c.models.embed_content(
             model=settings.EMBEDDING_MODEL,
             contents=batch,
@@ -111,21 +123,30 @@ def _embed_batch(batch: list[str]) -> list[list[float]]:
         if not result.embeddings:
             return []
             
-        # Extract values from each embedding object
-        embeddings = [e.values for e in result.embeddings]
-        
-        logger.debug(f"API batch response: received {len(embeddings)} embeddings")
-        return embeddings
+        return [e.values for e in result.embeddings]
         
     except Exception as e:
+        error_str = str(e).lower()
+        if "404" in error_str and "not found" in error_str:
+            logger.warning(f"Primary embedding model {settings.EMBEDDING_MODEL} failed. Trying fallback.")
+            try:
+                result = c.models.embed_content(
+                    model=settings.FALLBACK_EMBEDDING_MODEL,
+                    contents=batch,
+                    config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
+                )
+                return [e.values for e in result.embeddings] if result.embeddings else []
+            except Exception as fe:
+                logger.error(f"Fallback embedding failed: {fe}")
+        
         logger.error(f"Gemini batch embedding error: {str(e)}")
-        # We don't raise here, we let get_embeddings handle the fallback
         return []
 
 
+@lru_cache(maxsize=128)
 def get_query_embedding(query: str) -> list[float]:
     """
-    Generate an embedding for a single query string.
+    Generate an embedding for a single query string with caching.
     """
     # Client is initialized lazily
 
@@ -145,7 +166,7 @@ def get_query_embedding(query: str) -> list[float]:
     reraise=True,
 )
 def _embed_single(query: str, task_type: str = "RETRIEVAL_QUERY") -> list[float]:
-    """Embed a single string using Gemini API."""
+    """Embed a single string using Gemini API with fallback."""
     c = _get_client()
     try:
         result = c.models.embed_content(
@@ -153,18 +174,31 @@ def _embed_single(query: str, task_type: str = "RETRIEVAL_QUERY") -> list[float]
             contents=query,
             config=types.EmbedContentConfig(task_type=task_type),
         )
-        # result.embeddings is a list even for single content
         if not result.embeddings:
             raise ValueError("API returned no embeddings")
             
         embedding = result.embeddings[0].values
-        
-        # Gemini sometimes returns a list of lists if content was interpreted as multiple parts
         if embedding and isinstance(embedding[0], list):
-            logger.warning("Single embedding returned nested list, flattening...")
             embedding = embedding[0]
-            
         return embedding
+        
     except Exception as e:
+        error_str = str(e).lower()
+        if "404" in error_str and "not found" in error_str:
+            logger.warning(f"Primary model {settings.EMBEDDING_MODEL} failed. Trying fallback.")
+            try:
+                result = c.models.embed_content(
+                    model=settings.FALLBACK_EMBEDDING_MODEL,
+                    contents=query,
+                    config=types.EmbedContentConfig(task_type=task_type),
+                )
+                if result.embeddings:
+                    embedding = result.embeddings[0].values
+                    if embedding and isinstance(embedding[0], list):
+                        embedding = embedding[0]
+                    return embedding
+            except Exception as fe:
+                logger.error(f"Fallback single embedding failed: {fe}")
+
         logger.error(f"Gemini single embedding error: {str(e)}")
         raise RuntimeError(f"Gemini Embedding API error: {str(e)}") from e

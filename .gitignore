@@ -39,3 +39,5 @@ test_full_pipeline.py
 tree.txt
 verify_output.txt
 verify_backend.py
+res.txt
+server.log

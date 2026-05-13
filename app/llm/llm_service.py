@@ -8,10 +8,12 @@ from typing import Optional
 from google import genai
 from google.genai import types
 from loguru import logger
+from functools import lru_cache
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
+    retry_if_exception,
 )
 
 from app.config import settings
@@ -38,6 +40,12 @@ def _get_client():
     return client
 
 
+def _is_retryable_exception(e):
+    """Check if the exception should trigger a retry."""
+    err_str = str(e).lower()
+    # Retry on 429 (rate limit) and 5xx (server errors)
+    return "429" in err_str or "quota" in err_str or "exhausted" in err_str or "500" in err_str or "503" in err_str
+
 def _make_retry_decorator():
     """Create a retry decorator using current settings."""
     return retry(
@@ -46,6 +54,7 @@ def _make_retry_decorator():
             min=settings.RETRY_MIN_WAIT,
             max=settings.RETRY_MAX_WAIT,
         ),
+        retry=retry_if_exception(_is_retryable_exception),
         before_sleep=tenacity_before_sleep_log,
         reraise=True,
     )
@@ -56,34 +65,58 @@ def _call_gemini(model_name: str, system_instruction: str, user_prompt: str, tem
     """Make a Gemini generative call with retry logic and fallback."""
     c = _get_client()
     
+    # Prepare system instruction as a Content object for better SDK compatibility
+    # and to avoid 'systemInstruction' name mismatch issues in some API versions.
+    sys_inst = types.Content(
+        parts=[types.Part(text=system_instruction)],
+        role="system"
+    )
+
     try:
         return c.models.generate_content(
             model=model_name,
             contents=user_prompt,
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
+                system_instruction=sys_inst,
                 temperature=temperature,
                 max_output_tokens=max_tokens,
             )
         )
     except Exception as e:
-        # Check if it's a 404 error and we have a fallback model
         error_str = str(e).lower()
+        
+        # Handle 404 Model Not Found
         if "404" in error_str and "not found" in error_str and model_name != settings.FALLBACK_LLM_MODEL:
             logger.warning(f"Model {model_name} not found. Attempting fallback to {settings.FALLBACK_LLM_MODEL}")
             return c.models.generate_content(
                 model=settings.FALLBACK_LLM_MODEL,
                 contents=user_prompt,
                 config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
+                    system_instruction=sys_inst,
                     temperature=temperature,
                     max_output_tokens=max_tokens,
                 )
             )
-        # Reraise if not a 404 or already tried fallback
+            
+        # Handle 400 Invalid Argument (like the systemInstruction issue)
+        if "400" in error_str and "invalid" in error_str:
+            logger.warning("Invalid argument in request. Retrying without explicit system_instruction field...")
+            # Fallback: Merge system prompt into user prompt if the API rejected the field
+            merged_prompt = f"{system_instruction}\n\nUSER REQUEST:\n{user_prompt}"
+            return c.models.generate_content(
+                model=model_name,
+                contents=merged_prompt,
+                config=types.GenerateContentConfig(
+                    temperature=temperature,
+                    max_output_tokens=max_tokens,
+                )
+            )
+            
+        # Reraise if not handled
         raise
 
 
+@lru_cache(maxsize=128)
 def generate(
     system_prompt: str,
     user_prompt: str,
@@ -139,5 +172,10 @@ def generate(
         return result
 
     except Exception as e:
+        error_str = str(e).lower()
+        if "429" in error_str or "quota" in error_str:
+            logger.warning("Gemini quota exhausted. Returning rate-limit message to user.")
+            return "I'm sorry, but the AI service is currently at its daily limit. Please try again later or ask a question that doesn't require complex generation."
+        
         raise RuntimeError(f"Failed to generate AI response: {str(e)}") from e
 

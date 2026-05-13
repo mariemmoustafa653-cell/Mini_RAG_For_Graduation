@@ -18,26 +18,30 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
 
     # ── Model Configuration ─────────────────────────────────
-    EMBEDDING_MODEL: str = "models/gemini-embedding-2"
+    EMBEDDING_MODEL: str = "models/gemini-embedding-001"
+    FALLBACK_EMBEDDING_MODEL: str = "models/gemini-embedding-2-preview"
     LLM_MODEL: str = "gemini-2.0-flash"
     FALLBACK_LLM_MODEL: str = "gemini-flash-latest"
 
     # ── Chunking ────────────────────────────────────────────
-    CHUNK_SIZE: int = 1000
-    CHUNK_OVERLAP: int = 200
+    CHUNK_SIZE: int = 800  # Reduced from 1000 to save tokens
+    CHUNK_OVERLAP: int = 150
 
     # ── Retrieval ───────────────────────────────────────────
-    TOP_K: int = 5
+    TOP_K: int = 3  # Reduced from 5 to save context tokens
     SIMILARITY_THRESHOLD: float = 0.25  # Minimum cosine similarity to accept a chunk
 
     # ── LLM Generation ─────────────────────────────────────
     TEMPERATURE: float = 0.3  # Low for factual accuracy
-    MAX_TOKENS: int = 2000
+    MAX_TOKENS: int = 1000  # Reduced from 2000 to prevent excessive generation
 
     # ── Resilience ─────────────────────────────────────────
-    MAX_RETRIES: int = 3
-    RETRY_MIN_WAIT: float = 1.0  # seconds
-    RETRY_MAX_WAIT: float = 10.0  # seconds
+    MAX_RETRIES: int = 5  # Increased retries
+    RETRY_MIN_WAIT: float = 2.0  # Increased initial wait
+    RETRY_MAX_WAIT: float = 60.0  # Increased max wait for backoff
+
+    # ── Optimization ────────────────────────────────────────
+    CACHE_TTL: int = 3600  # seconds
 
     # ── Upload ──────────────────────────────────────────────
     MAX_FILE_SIZE_MB: int = 20
