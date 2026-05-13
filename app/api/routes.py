@@ -151,8 +151,16 @@ async def upload_document(
     except PDFProcessingError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Upload failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Upload processing failed: {str(e)}")
+        logger.exception(f"Upload failed: {str(e)}")
+        # Check if it's a known error type we want to expose
+        error_msg = str(e).strip("'\"")
+        if any(kw in error_msg.lower() for kw in ["api_key", "api key", "unauthorized", "invalid key"]):
+            error_msg = "Invalid API configuration. Please check your GEMINI_API_KEY in the .env file."
+        
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Upload processing failed: {error_msg}"
+        )
 
 
 # ── AI Action Handler ───────────────────────────────────────
@@ -213,8 +221,15 @@ async def _handle_ai_action(action: str, request: AIRequest) -> AIResponse:
     except UnsupportedActionError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"AI action '{action}' failed: {e}")
-        raise HTTPException(status_code=500, detail=f"AI processing failed: {str(e)}")
+        logger.exception(f"AI action '{action}' failed: {str(e)}")
+        error_msg = str(e).strip("'\"")
+        if any(kw in error_msg.lower() for kw in ["api_key", "api key", "unauthorized", "invalid key"]):
+            error_msg = "Invalid API configuration. Please check your GEMINI_API_KEY in the .env file."
+        
+        raise HTTPException(
+            status_code=500, 
+            detail=f"AI processing failed: {error_msg}"
+        )
 
 
 # ── AI Endpoints ────────────────────────────────────────────

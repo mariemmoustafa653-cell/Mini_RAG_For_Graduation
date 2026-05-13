@@ -14,12 +14,13 @@ _BASE_DIR = Path(__file__).resolve().parent.parent
 class Settings(BaseSettings):
     """Central configuration for the Mini RAG platform."""
 
-    # ── OpenAI ──────────────────────────────────────────────
-    OPENAI_API_KEY: str = ""
+    # ── Gemini ──────────────────────────────────────────────
+    GEMINI_API_KEY: str = ""
 
     # ── Model Configuration ─────────────────────────────────
-    EMBEDDING_MODEL: str = "text-embedding-3-small"
-    LLM_MODEL: str = "gpt-4o-mini"
+    EMBEDDING_MODEL: str = "models/gemini-embedding-2"
+    LLM_MODEL: str = "gemini-2.0-flash"
+    FALLBACK_LLM_MODEL: str = "gemini-flash-latest"
 
     # ── Chunking ────────────────────────────────────────────
     CHUNK_SIZE: int = 1000

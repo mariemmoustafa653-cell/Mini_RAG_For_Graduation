@@ -7,28 +7,6 @@ summarize content, generate quizzes, explain topics, create
 flashcards, and translate materials from uploaded PDF documents.
 """
 
-import httpx
-
-# ── GLOBAL DEPENDENCY FIX ─────────────────────────────────────
-# Monkey-patch httpx.Client and httpx.AsyncClient to gracefully ignore 
-# the deprecated 'proxies' argument if passed by legacy versions of the openai SDK.
-_original_httpx_init = httpx.Client.__init__
-_original_async_httpx_init = httpx.AsyncClient.__init__
-
-def _patched_httpx_init(self, *args, **kwargs):
-    if 'proxies' in kwargs:
-        kwargs.pop('proxies')
-    _original_httpx_init(self, *args, **kwargs)
-
-def _patched_async_httpx_init(self, *args, **kwargs):
-    if 'proxies' in kwargs:
-        kwargs.pop('proxies')
-    _original_async_httpx_init(self, *args, **kwargs)
-
-httpx.Client.__init__ = _patched_httpx_init
-httpx.AsyncClient.__init__ = _patched_async_httpx_init
-# ──────────────────────────────────────────────────────────────
-
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -45,7 +23,7 @@ from app.utils.logger import setup_logger
 
 
 # ── Initialize Logging ──────────────────────────────────────
-setup_logger()
+# Already initialized on import in app.utils.logger
 
 
 @asynccontextmanager
@@ -133,3 +111,8 @@ async def root():
 async def health_check():
     """Health check endpoint for monitoring."""
     return {"status": "healthy", "service": "mini-rag"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

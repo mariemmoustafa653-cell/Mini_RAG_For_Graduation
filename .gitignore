@@ -30,3 +30,12 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Scratch & Debug
+scratch/
+check_openai.py
+test_api.py
+test_full_pipeline.py
+tree.txt
+verify_output.txt
+verify_backend.py

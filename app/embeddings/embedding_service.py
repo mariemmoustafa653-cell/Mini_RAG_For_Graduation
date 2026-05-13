@@ -1,57 +1,45 @@
 """
-Embedding service using OpenAI's multilingual embedding model.
+Embedding service using Google Gemini's multilingual embedding model.
 Generates vector representations for document chunks and user queries.
 Includes retry logic for API resilience.
 """
 
-from typing import Optional
-
-from openai import OpenAI
+from google import genai
+from google.genai import types
 from loguru import logger
 from tenacity import (
     retry,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
 )
 
 from app.config import settings
+from app.utils.logger import tenacity_before_sleep_log
 
 
-# Module-level client (initialized lazily)
-_client: Optional[OpenAI] = None
+# Global client instance
+client = None
 
 
-def _get_client() -> OpenAI:
-    """Get or create the OpenAI client."""
-    global _client
-    if _client is None:
-        _client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        logger.info(f"OpenAI client initialized (embedding model: {settings.EMBEDDING_MODEL})")
-    return _client
-
-
-def _make_retry_decorator():
-    """Create a retry decorator using current settings."""
-    return retry(
-        stop=stop_after_attempt(settings.MAX_RETRIES),
-        wait=wait_exponential(
-            min=settings.RETRY_MIN_WAIT,
-            max=settings.RETRY_MAX_WAIT,
-        ),
-        retry=retry_if_exception_type((Exception,)),
-        before_sleep=before_sleep_log(logger, "WARNING"),
-        reraise=True,
-    )
+def _get_client():
+    """Get or initialize the Gemini API client."""
+    global client
+    if client is None:
+        if not settings.GEMINI_API_KEY:
+            logger.error("GEMINI_API_KEY is not set in environment!")
+        
+        # Explicitly use v1 to avoid legacy v1beta issues
+        client = genai.Client(
+            api_key=settings.GEMINI_API_KEY,
+            http_options={"api_version": "v1"}
+        )
+        logger.info(f"Gemini API configured (embedding model: {settings.EMBEDDING_MODEL})")
+    return client
 
 
 def get_embeddings(texts: list[str]) -> list[list[float]]:
     """
-    Generate embeddings for a batch of texts.
-    
-    Uses OpenAI's text-embedding-3-small which supports
-    multilingual content (Arabic + English).
+    Generate embeddings for a batch of texts using Gemini.
     
     Args:
         texts: List of text strings to embed
@@ -62,76 +50,121 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
 
-    client = _get_client()
+    # Client is initialized lazily
 
-    # Process in batches of 100 (OpenAI limit is 2048 but smaller is safer)
-    batch_size = 100
+
+    # Gemini batch limit for embeddings is typically 100 texts
+    batch_size = 50  # Reduced batch size for better reliability
     all_embeddings = []
+
+    logger.info(f"Generating embeddings for {len(texts)} chunks...")
 
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
-        # Clean batch: replace empty strings with a space to avoid API errors
+        # Clean batch: replace empty strings with a space
         batch = [t if t.strip() else " " for t in batch]
-        logger.debug(f"Embedding batch {i // batch_size + 1}: {len(batch)} texts")
+        logger.debug(f"Processing batch {i // batch_size + 1}: {len(batch)} texts")
 
-        batch_embeddings = _embed_batch(client, batch)
+        batch_embeddings = _embed_batch(batch)
+        
+        # Validation: ensure batch call returned correct number of embeddings
+        if len(batch_embeddings) != len(batch):
+            logger.warning(
+                f"Batch embedding count mismatch: expected {len(batch)}, got {len(batch_embeddings)}. "
+                "Falling back to individual embedding calls for this batch."
+            )
+            # Fallback to single calls for this specific batch
+            batch_embeddings = []
+            for text in batch:
+                batch_embeddings.append(_embed_single(text, task_type="RETRIEVAL_DOCUMENT"))
+
         all_embeddings.extend(batch_embeddings)
 
-    logger.info(f"Generated {len(all_embeddings)} embeddings (dim={len(all_embeddings[0])})")
+    # Final validation
+    if len(all_embeddings) != len(texts):
+        error_msg = f"FATAL: Final count mismatch! Chunks ({len(texts)}) != Embeddings ({len(all_embeddings)})"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+    logger.info(f"Successfully generated {len(all_embeddings)} embeddings (dim={len(all_embeddings[0])})")
     return all_embeddings
 
 
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(min=1, max=10),
-    before_sleep=before_sleep_log(logger, "WARNING"),
+    before_sleep=tenacity_before_sleep_log,
     reraise=True,
 )
-def _embed_batch(client: OpenAI, batch: list[str]) -> list[list[float]]:
-    """Embed a single batch with retry logic."""
+def _embed_batch(batch: list[str]) -> list[list[float]]:
+    """Embed a single batch using Gemini API."""
+    c = _get_client()
     try:
-        response = client.embeddings.create(
+        # In the new google-genai SDK, passing a list to contents should work
+        # but we must be careful with how the response is parsed.
+        result = c.models.embed_content(
             model=settings.EMBEDDING_MODEL,
-            input=batch,
+            contents=batch,
+            config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
         )
-        return [item.embedding for item in response.data]
+        
+        if not result.embeddings:
+            return []
+            
+        # Extract values from each embedding object
+        embeddings = [e.values for e in result.embeddings]
+        
+        logger.debug(f"API batch response: received {len(embeddings)} embeddings")
+        return embeddings
+        
     except Exception as e:
-        logger.warning(f"Embedding API call failed (will retry): {e}")
-        raise
+        logger.error(f"Gemini batch embedding error: {str(e)}")
+        # We don't raise here, we let get_embeddings handle the fallback
+        return []
 
 
 def get_query_embedding(query: str) -> list[float]:
     """
     Generate an embedding for a single query string.
-    
-    Args:
-        query: User's question or search query
-    
-    Returns:
-        Embedding vector as a list of floats
     """
-    client = _get_client()
+    # Client is initialized lazily
+
     query = query.strip() if query.strip() else " "
 
     try:
-        return _embed_single(client, query)
+        return _embed_single(query)
     except Exception as e:
-        logger.error(f"Query embedding error after retries: {e}")
-        raise RuntimeError(f"Failed to embed query: {e}") from e
+        logger.error(f"Query embedding error: {str(e)}")
+        raise RuntimeError(f"Failed to embed query: {str(e)}") from e
 
 
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(min=1, max=10),
-    before_sleep=before_sleep_log(logger, "WARNING"),
+    before_sleep=tenacity_before_sleep_log,
     reraise=True,
 )
-def _embed_single(client: OpenAI, query: str) -> list[float]:
-    """Embed a single query with retry logic."""
-    response = client.embeddings.create(
-        model=settings.EMBEDDING_MODEL,
-        input=query,
-    )
-    embedding = response.data[0].embedding
-    logger.debug(f"Query embedded: '{query[:50]}...' → dim={len(embedding)}")
-    return embedding
+def _embed_single(query: str, task_type: str = "RETRIEVAL_QUERY") -> list[float]:
+    """Embed a single string using Gemini API."""
+    c = _get_client()
+    try:
+        result = c.models.embed_content(
+            model=settings.EMBEDDING_MODEL,
+            contents=query,
+            config=types.EmbedContentConfig(task_type=task_type),
+        )
+        # result.embeddings is a list even for single content
+        if not result.embeddings:
+            raise ValueError("API returned no embeddings")
+            
+        embedding = result.embeddings[0].values
+        
+        # Gemini sometimes returns a list of lists if content was interpreted as multiple parts
+        if embedding and isinstance(embedding[0], list):
+            logger.warning("Single embedding returned nested list, flattening...")
+            embedding = embedding[0]
+            
+        return embedding
+    except Exception as e:
+        logger.error(f"Gemini single embedding error: {str(e)}")
+        raise RuntimeError(f"Gemini Embedding API error: {str(e)}") from e

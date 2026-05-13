@@ -38,5 +38,16 @@ def setup_logger():
     return logger
 
 
+def tenacity_before_sleep_log(retry_state):
+    """
+    Loguru-safe alternative to tenacity.before_sleep_log.
+    Prevents KeyError when exception string contains curly braces.
+    """
+    if retry_state.outcome and retry_state.outcome.failed:
+        ex = retry_state.outcome.exception()
+        # Use str(ex) and log it directly to avoid loguru's curly brace interpolation
+        logger.warning(f"Retrying after error: {str(ex)}")
+
+
 # Initialize logger on import
 setup_logger()
