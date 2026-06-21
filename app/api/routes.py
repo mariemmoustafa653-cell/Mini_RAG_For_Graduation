@@ -196,8 +196,41 @@ async def _handle_ai_action(action: str, request: AIRequest) -> AIResponse:
 
         # Optimization: If context is empty or confidence is very low, avoid LLM call
         if (not context.strip() or confidence.get("avg_score", 0) < settings.SIMILARITY_THRESHOLD) and action in ["chat", "summarize", "explain"]:
-            logger.info(f"Low confidence ({confidence.get('avg_score')}) or empty context for action '{action}', skipping LLM call.")
-            ai_response = "I couldn't find any highly relevant information in the uploaded materials to answer your request with confidence."
+            logger.info(f"Low confidence ({confidence.get('avg_score')}) or empty context for action '{action}', attempting domain classification.")
+
+            # Domain-constrained fallback: classify whether the question is in-domain
+            from app.utils.domain_classifier import (
+                classify_domain,
+                GENERAL_KNOWLEDGE_SYSTEM_PROMPT,
+                GENERAL_KNOWLEDGE_USER_PROMPT,
+            )
+            domain_result = classify_domain(
+                teacher_id=request.teacher_id,
+                question=request.message,
+                chunks=chunks,
+            )
+
+            if domain_result == "in_domain":
+                # Answer from general domain knowledge with a dedicated prompt
+                # (NOT reusing RAG prompts, which forbid outside knowledge)
+                logger.info("Domain classification: IN-DOMAIN — generating general knowledge answer.")
+                gk_user_prompt = GENERAL_KNOWLEDGE_USER_PROMPT.format(question=request.message)
+                general_answer = generate(GENERAL_KNOWLEDGE_SYSTEM_PROMPT, gk_user_prompt)
+                ai_response = (
+                    "Note: This answer is based on general domain knowledge "
+                    "and not directly from the uploaded document.\n\n"
+                    + general_answer
+                )
+            elif domain_result == "out_of_domain":
+                logger.info("Domain classification: OUT-OF-DOMAIN — rejecting.")
+                ai_response = (
+                    "I cannot answer this question because it is outside "
+                    "the scope of the uploaded course material."
+                )
+            else:
+                # "uncertain" or any unexpected value — preserve existing behavior
+                logger.info("Domain classification: UNCERTAIN — using existing fallback.")
+                ai_response = "I couldn't find any highly relevant information in the uploaded materials to answer your request with confidence."
         else:
             # Step 4: Route to prompt
             system_prompt, user_prompt = route(action, context, request.message)
