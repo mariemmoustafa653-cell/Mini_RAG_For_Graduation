@@ -197,7 +197,7 @@ Visit **http://localhost:8000/docs** for Swagger UI.
 |----------|---------|-------------|
 | `OPENAI_API_KEY` | — | Your OpenAI API key (required) |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model |
-| `LLM_MODEL` | `gpt-4o-mini` | Chat completion model |
+| `LLM_MODEL` | `gemini-2.5-flash` | Chat completion model |
 | `CHUNK_SIZE` | `1000` | Characters per chunk |
 | `CHUNK_OVERLAP` | `200` | Overlap between chunks |
 | `TOP_K` | `5` | Retrieved chunks per query |

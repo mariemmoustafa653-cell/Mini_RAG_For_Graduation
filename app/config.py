@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # ── Model Configuration ─────────────────────────────────
     EMBEDDING_MODEL: str = "models/gemini-embedding-001"
     FALLBACK_EMBEDDING_MODEL: str = "models/gemini-embedding-2-preview"
-    LLM_MODEL: str = "gemini-2.0-flash"
+    LLM_MODEL: str = "gemini-2.5-flash"
     FALLBACK_LLM_MODEL: str = "gemini-flash-latest"
 
     # ── Chunking ────────────────────────────────────────────

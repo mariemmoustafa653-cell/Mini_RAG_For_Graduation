@@ -10,6 +10,8 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from loguru import logger
 
+from app.config import settings
+
 from app.ingestion.pdf_processor import (
     validate_file,
     extract_text_from_pdf,
@@ -193,8 +195,8 @@ async def _handle_ai_action(action: str, request: AIRequest) -> AIResponse:
         context = build_context(chunks)
 
         # Optimization: If context is empty or confidence is very low, avoid LLM call
-        if (not context.strip() or confidence.get("mean_score", 0) < 0.1) and action in ["chat", "summarize", "explain"]:
-            logger.info(f"Low confidence ({confidence.get('mean_score')}) or empty context for action '{action}', skipping LLM call.")
+        if (not context.strip() or confidence.get("avg_score", 0) < settings.SIMILARITY_THRESHOLD) and action in ["chat", "summarize", "explain"]:
+            logger.info(f"Low confidence ({confidence.get('avg_score')}) or empty context for action '{action}', skipping LLM call.")
             ai_response = "I couldn't find any highly relevant information in the uploaded materials to answer your request with confidence."
         else:
             # Step 4: Route to prompt
