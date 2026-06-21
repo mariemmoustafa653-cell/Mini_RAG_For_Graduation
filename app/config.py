@@ -54,9 +54,19 @@ class Settings(BaseSettings):
 
     # ── Paths (computed from BASE_DIR) ──────────────────────
     BASE_DIR: Path = _BASE_DIR
-    UPLOAD_DIR: Path = _BASE_DIR / "uploads"
-    VECTOR_DATA_DIR: Path = _BASE_DIR / "vector_data"
-    DATABASE_PATH: Path = _BASE_DIR / "mini_rag.db"
+    DATA_DIR: Path = _BASE_DIR
+
+    @property
+    def UPLOAD_DIR(self) -> Path:
+        return self.DATA_DIR / "uploads"
+
+    @property
+    def VECTOR_DATA_DIR(self) -> Path:
+        return self.DATA_DIR / "vector_data"
+
+    @property
+    def DATABASE_PATH(self) -> Path:
+        return self.DATA_DIR / "mini_rag.db"
 
     class Config:
         env_file = ".env"
