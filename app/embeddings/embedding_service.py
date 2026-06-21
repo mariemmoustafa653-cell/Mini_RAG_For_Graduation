@@ -16,39 +16,12 @@ from tenacity import (
 
 from app.config import settings
 from app.utils.logger import tenacity_before_sleep_log
-
-
-# Global client instance
-client = None
+from app.utils.gemini_key_manager import get_key_manager
 
 
 def _get_client():
-    """Get or initialize the Gemini API client with model validation."""
-    global client
-    if client is None:
-        if not settings.GEMINI_API_KEY:
-            logger.error("GEMINI_API_KEY is not set in environment!")
-        
-        # Use v1beta for embeddings as some models are only supported there
-        client = genai.Client(
-            api_key=settings.GEMINI_API_KEY,
-            http_options={"api_version": "v1beta"}
-        )
-        
-        # Validate primary model availability
-        try:
-            available_models = [m.name for m in client.models.list()]
-            if settings.EMBEDDING_MODEL not in available_models:
-                logger.warning(f"Configured embedding model {settings.EMBEDDING_MODEL} not found in available models.")
-                if settings.FALLBACK_EMBEDDING_MODEL in available_models:
-                    logger.info(f"Using fallback embedding model: {settings.FALLBACK_EMBEDDING_MODEL}")
-                else:
-                    logger.error("Neither primary nor fallback embedding models found!")
-        except Exception as e:
-            logger.warning(f"Could not validate model availability: {e}")
-
-        logger.info(f"Gemini API configured (primary embedding model: {settings.EMBEDDING_MODEL})")
-    return client
+    """Get the Gemini API client via key manager."""
+    return get_key_manager().get_client(api_version="v1beta")
 
 
 def get_embeddings(texts: list[str]) -> list[list[float]]:
@@ -111,8 +84,9 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
     reraise=True,
 )
 def _embed_batch(batch: list[str]) -> list[list[float]]:
-    """Embed a single batch using Gemini API with fallback."""
-    c = _get_client()
+    """Embed a single batch using Gemini API with fallback and key rotation."""
+    km = get_key_manager()
+    c = km.get_client(api_version="v1beta")
     try:
         result = c.models.embed_content(
             model=settings.EMBEDDING_MODEL,
@@ -126,6 +100,18 @@ def _embed_batch(batch: list[str]) -> list[list[float]]:
         return [e.values for e in result.embeddings]
         
     except Exception as e:
+        # ── Key rotation on 429 / quota errors ──────────────
+        if km.is_quota_error(e):
+            if km.rotate_key():
+                logger.warning("Embedding quota/rate-limit hit — rotated to next API key, retrying...")
+                new_client = km.get_client(api_version="v1beta")
+                result = new_client.models.embed_content(
+                    model=settings.EMBEDDING_MODEL,
+                    contents=batch,
+                    config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
+                )
+                return [e.values for e in result.embeddings] if result.embeddings else []
+
         error_str = str(e).lower()
         if "404" in error_str and "not found" in error_str:
             logger.warning(f"Primary embedding model {settings.EMBEDDING_MODEL} failed. Trying fallback.")
@@ -166,8 +152,9 @@ def get_query_embedding(query: str) -> list[float]:
     reraise=True,
 )
 def _embed_single(query: str, task_type: str = "RETRIEVAL_QUERY") -> list[float]:
-    """Embed a single string using Gemini API with fallback."""
-    c = _get_client()
+    """Embed a single string using Gemini API with fallback and key rotation."""
+    km = get_key_manager()
+    c = km.get_client(api_version="v1beta")
     try:
         result = c.models.embed_content(
             model=settings.EMBEDDING_MODEL,
@@ -183,6 +170,22 @@ def _embed_single(query: str, task_type: str = "RETRIEVAL_QUERY") -> list[float]
         return embedding
         
     except Exception as e:
+        # ── Key rotation on 429 / quota errors ──────────────
+        if km.is_quota_error(e):
+            if km.rotate_key():
+                logger.warning("Embedding single quota/rate-limit hit — rotated to next API key, retrying...")
+                new_client = km.get_client(api_version="v1beta")
+                result = new_client.models.embed_content(
+                    model=settings.EMBEDDING_MODEL,
+                    contents=query,
+                    config=types.EmbedContentConfig(task_type=task_type),
+                )
+                if result.embeddings:
+                    embedding = result.embeddings[0].values
+                    if embedding and isinstance(embedding[0], list):
+                        embedding = embedding[0]
+                    return embedding
+
         error_str = str(e).lower()
         if "404" in error_str and "not found" in error_str:
             logger.warning(f"Primary model {settings.EMBEDDING_MODEL} failed. Trying fallback.")

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # ── Gemini ──────────────────────────────────────────────
     GEMINI_API_KEY: str = ""
+    GEMINI_API_KEYS: str = ""  # Comma-separated list for key rotation
 
     # ── Model Configuration ─────────────────────────────────
     EMBEDDING_MODEL: str = "models/gemini-embedding-001"
@@ -81,6 +82,20 @@ class Settings(BaseSettings):
     @property
     def max_file_size_bytes(self) -> int:
         return self.MAX_FILE_SIZE_MB * 1024 * 1024
+
+    @property
+    def gemini_api_keys_list(self) -> list[str]:
+        """Resolve all configured Gemini API keys into a list.
+
+        Priority: GEMINI_API_KEYS (comma-separated) first, then GEMINI_API_KEY
+        as a fallback. Deduplicates while preserving order.
+        """
+        keys: list[str] = []
+        if self.GEMINI_API_KEYS:
+            keys.extend(k.strip() for k in self.GEMINI_API_KEYS.split(",") if k.strip())
+        if self.GEMINI_API_KEY and self.GEMINI_API_KEY not in keys:
+            keys.append(self.GEMINI_API_KEY)
+        return keys if keys else [""]
 
 
 # Singleton settings instance

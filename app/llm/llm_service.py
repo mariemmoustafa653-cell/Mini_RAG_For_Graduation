@@ -18,26 +18,12 @@ from tenacity import (
 
 from app.config import settings
 from app.utils.logger import tenacity_before_sleep_log
-
-
-# Global client instance
-client = None
+from app.utils.gemini_key_manager import get_key_manager
 
 
 def _get_client():
-    """Get or initialize the Gemini API client."""
-    global client
-    if client is None:
-        if not settings.GEMINI_API_KEY:
-            logger.error("GEMINI_API_KEY is not set in environment!")
-        
-        # Explicitly use v1 to avoid legacy v1beta issues
-        client = genai.Client(
-            api_key=settings.GEMINI_API_KEY,
-            http_options={"api_version": "v1"}
-        )
-        logger.info(f"Gemini LLM client initialized (model: {settings.LLM_MODEL})")
-    return client
+    """Get the Gemini API client via key manager."""
+    return get_key_manager().get_client(api_version="v1")
 
 
 def _is_retryable_exception(e):
@@ -62,8 +48,9 @@ def _make_retry_decorator():
 
 @_make_retry_decorator()
 def _call_gemini(model_name: str, system_instruction: str, user_prompt: str, temperature: float, max_tokens: int):
-    """Make a Gemini generative call with retry logic and fallback."""
-    c = _get_client()
+    """Make a Gemini generative call with retry logic, key rotation, and fallback."""
+    km = get_key_manager()
+    c = km.get_client(api_version="v1")
     
     # Prepare system instruction as a Content object for better SDK compatibility
     # and to avoid 'systemInstruction' name mismatch issues in some API versions.
@@ -85,6 +72,23 @@ def _call_gemini(model_name: str, system_instruction: str, user_prompt: str, tem
     except Exception as e:
         error_str = str(e).lower()
         
+        # ── Key rotation on 429 / quota errors ──────────────
+        if km.is_quota_error(e):
+            if km.rotate_key():
+                logger.warning("Quota/rate-limit hit — rotated to next API key, retrying...")
+                new_client = km.get_client(api_version="v1")
+                return new_client.models.generate_content(
+                    model=model_name,
+                    contents=user_prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=sys_inst,
+                        temperature=temperature,
+                        max_output_tokens=max_tokens,
+                    )
+                )
+            # All keys exhausted — let tenacity / existing error handling deal with it
+            raise
+
         # Handle 404 Model Not Found
         if "404" in error_str and "not found" in error_str and model_name != settings.FALLBACK_LLM_MODEL:
             logger.warning(f"Model {model_name} not found. Attempting fallback to {settings.FALLBACK_LLM_MODEL}")
