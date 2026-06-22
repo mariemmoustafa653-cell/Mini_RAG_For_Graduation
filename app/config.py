@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # ── Retrieval ───────────────────────────────────────────
     TOP_K: int = 3  # Reduced from 5 to save context tokens
-    SIMILARITY_THRESHOLD: float = 0.25  # Minimum cosine similarity to accept a chunk
+    SIMILARITY_THRESHOLD: float = 0.60  # Minimum cosine similarity to accept a chunk
 
     # ── LLM Generation ─────────────────────────────────────
     TEMPERATURE: float = 0.3  # Low for factual accuracy
