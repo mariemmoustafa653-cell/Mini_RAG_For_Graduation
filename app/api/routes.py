@@ -328,7 +328,7 @@ async def serve_document_pdf(doc_id: int, teacher_id: str):
     return FileResponse(
         str(file_path),
         media_type="application/pdf",
-        filename=doc["original_filename"],
+        headers={"Content-Disposition": "inline"},
     )
 
 
