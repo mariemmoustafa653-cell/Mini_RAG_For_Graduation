@@ -237,7 +237,28 @@ body {
 .message__bubble li { margin: 0.3rem 0; }
 .message__bubble p { margin: 0.4rem 0; }
 .message__bubble strong { font-weight: 600; }
-.message__sources { margin-top: 0.5rem; font-size: 0.72rem; color: var(--text-muted); }
+.message__sources { margin-top: 0.5rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem; }
+
+/* Source Links (Clickable PDF page references) */
+.source-link {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.25rem 0.6rem; margin: 0.1rem 0;
+  border-radius: 20px;
+  background: rgba(124, 58, 237, 0.12);
+  border: 1px solid rgba(124, 58, 237, 0.25);
+  color: #c4b5fd;
+  font-size: 0.72rem; font-weight: 500;
+  text-decoration: none;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+.source-link:hover {
+  background: rgba(124, 58, 237, 0.25);
+  border-color: rgba(124, 58, 237, 0.5);
+  color: #e9d5ff;
+  transform: translateY(-1px);
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.2);
+}
 
 /* Typing Indicator */
 .typing-indicator { display: flex; gap: 4px; padding: 0.8rem 1rem; }

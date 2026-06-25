@@ -7,6 +7,7 @@ document management, and system monitoring.
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from loguru import logger
 
@@ -200,17 +201,23 @@ async def _handle_ai_action(action: str, request: AIRequest) -> AIResponse:
         # Step 5: Generate response
         ai_response = generate(system_prompt, user_prompt)
 
-        # Build source references
-        sources = [
-            {
+        # Build source references with document filenames for clickable links
+        doc_name_cache = {}
+        sources = []
+        for c in chunks:
+            d_id = c.get("doc_id")
+            if d_id and d_id not in doc_name_cache:
+                doc_info = get_document_by_id(d_id)
+                doc_name_cache[d_id] = doc_info["original_filename"] if doc_info else "Unknown"
+
+            sources.append({
                 "page": c.get("page"),
-                "doc_id": c.get("doc_id"),
+                "doc_id": d_id,
+                "filename": doc_name_cache.get(d_id, "Unknown"),
                 "score": round(c.get("score", 0), 3),
                 "confidence": c.get("confidence", "unknown"),
                 "preview": c.get("text", "")[:150] + "...",
-            }
-            for c in chunks
-        ]
+            })
 
         return AIResponse(
             action=action,
@@ -298,6 +305,31 @@ async def remove_document(doc_id: int, teacher_id: str):
     delete_document_vectors(teacher_id, doc_id)
 
     return {"message": "Document deleted successfully", "document_id": doc_id}
+
+
+# ── PDF Viewer ──────────────────────────────────────────
+
+@router.get("/documents/{doc_id}/pdf")
+async def serve_document_pdf(doc_id: int, teacher_id: str):
+    """
+    Serve a teacher's uploaded PDF for in-browser viewing.
+
+    Security: Validates that the requesting teacher_id owns the document.
+    Used by the frontend to open clickable source links.
+    """
+    doc = get_document_by_id(doc_id)
+    if not doc or doc["teacher_id"] != teacher_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_path = settings.UPLOAD_DIR / doc["teacher_id"] / doc["filename"]
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="PDF file not found on disk")
+
+    return FileResponse(
+        str(file_path),
+        media_type="application/pdf",
+        filename=doc["original_filename"],
+    )
 
 
 # ── Re-indexing ─────────────────────────────────────────────

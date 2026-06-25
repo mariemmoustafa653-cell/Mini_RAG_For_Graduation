@@ -280,8 +280,13 @@ function addMessage(text, role, sources = [], action = '') {
 
   let sourcesHtml = '';
   if (sources && sources.length > 0) {
-    const srcList = sources.map(s => `p.${s.page}`).join(', ');
-    sourcesHtml = `<div class="message__sources">📎 Sources: ${srcList}</div>`;
+    const teacherId = els.teacherId.value.trim();
+    const srcLinks = sources.map(s => {
+      const pdfUrl = `${API_BASE}/documents/${s.doc_id}/pdf?teacher_id=${encodeURIComponent(teacherId)}#page=${s.page}`;
+      const tooltip = `${s.filename || 'PDF'} — Page ${s.page}`;
+      return `<a href="${pdfUrl}" target="_blank" rel="noopener noreferrer" class="source-link" title="${tooltip}">🔗 Page ${s.page}</a>`;
+    }).join('');
+    sourcesHtml = `<div class="message__sources">${srcLinks}</div>`;
   }
 
   msgDiv.innerHTML = `
